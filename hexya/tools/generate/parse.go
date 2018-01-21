@@ -70,8 +70,7 @@ func GetModulePackages(program *loader.Program) []*ModuleInfo {
 	// and we check for 'hexya/models' package
 	for _, pack := range program.AllPackages {
 		obj := pack.Pkg.Scope().Lookup("MODULE_NAME")
-		_, ok := obj.(*types.Const)
-		if ok {
+		if obj != nil {
 			modules[pack.Pkg.Path()] = NewModuleInfo(pack, Base)
 			continue
 		}
@@ -83,9 +82,8 @@ func GetModulePackages(program *loader.Program) []*ModuleInfo {
 	// Now we add packages that live inside another module
 	for _, pack := range program.AllPackages {
 		for _, module := range modules {
-			if strings.HasPrefix(pack.Pkg.Path(), module.Pkg.Path()) {
-				typ := Subs
-				modules[pack.Pkg.Path()] = NewModuleInfo(pack, typ)
+			if strings.HasPrefix(pack.Pkg.Path(), module.Pkg.Path()+"/") && pack.Pkg.Path() != module.Pkg.Path() {
+				modules[pack.Pkg.Path()] = NewModuleInfo(pack, Subs)
 			}
 		}
 	}
@@ -325,7 +323,7 @@ func ExtractFunctionName(node *ast.CallExpr) (string, error) {
 	case *ast.Ident:
 		fName = nf.Name
 	default:
-		return "", errors.New("Unexpected node type")
+		return "", errors.New("unexpected node type")
 	}
 	return fName, nil
 }
@@ -447,14 +445,14 @@ func parseAddMethod(node *ast.CallExpr, modInfo *ModuleInfo, modelsData *map[str
 	if _, exists := (*modelsData)[modelName]; !exists {
 		(*modelsData)[modelName] = newModelASTData(modelName)
 	}
-	methodData := MethodASTData{
+	methData := MethodASTData{
 		Name:    methodName,
 		Doc:     formatDocString(docStr),
 		PkgPath: modInfo.Pkg.Path(),
 		Params:  extractParams(funcType, modInfo),
 		Returns: extractReturnType(funcType, modInfo),
 	}
-	(*modelsData)[modelName].Methods[methodName] = methodData
+	(*modelsData)[modelName].Methods[methodName] = methData
 }
 
 // parseDeclareMethod parses the given node which is a DeclareMethod function
@@ -477,7 +475,7 @@ func parseDeclareMethod(node *ast.CallExpr, modInfo *ModuleInfo, modelsData *map
 	if _, exists := (*modelsData)[modelName]; !exists {
 		(*modelsData)[modelName] = newModelASTData(modelName)
 	}
-	methodData := MethodASTData{
+	methData := MethodASTData{
 		Name:      methodName,
 		Doc:       formatDocString(docStr),
 		PkgPath:   modInfo.Pkg.Path(),
@@ -485,7 +483,7 @@ func parseDeclareMethod(node *ast.CallExpr, modInfo *ModuleInfo, modelsData *map
 		Returns:   extractReturnType(funcType, modInfo),
 		ToDeclare: true,
 	}
-	(*modelsData)[modelName].Methods[methodName] = methodData
+	(*modelsData)[modelName].Methods[methodName] = methData
 }
 
 // A generalMixinError is returned if the mixin is
@@ -534,15 +532,15 @@ func extractModel(ident ast.Expr) (string, error) {
 				// The assignment is another identifier, we go to the declaration of this new ident.
 				return extractModel(rd)
 			default:
-				return "", fmt.Errorf("Unmanaged type %s (%T) for %s", rd, rd, idt.Name)
+				return "", fmt.Errorf("unmanaged type %s (%T) for %s", rd, rd, idt.Name)
 			}
 		}
 	case *ast.CallExpr:
 		return extractModelNameFromFunc(idt)
 	default:
-		return "", fmt.Errorf("Unmanaged call. ident: %s (%T)", idt, idt)
+		return "", fmt.Errorf("unmanaged call. ident: %s (%T)", idt, idt)
 	}
-	return "", errors.New("Unmanaged situation")
+	return "", errors.New("unmanaged situation")
 }
 
 // extractModelNameFromFunc extracts the model name from a pool.ModelName()
@@ -551,7 +549,7 @@ func extractModelNameFromFunc(ce *ast.CallExpr) (string, error) {
 	switch ft := ce.Fun.(type) {
 	case *ast.Ident:
 		// func is called without selector, then it is not from pool
-		return "", errors.New("Function call without selector")
+		return "", errors.New("function call without selector")
 	case *ast.SelectorExpr:
 		switch ftt := ft.X.(type) {
 		case *ast.Ident:
@@ -562,10 +560,10 @@ func extractModelNameFromFunc(ce *ast.CallExpr) (string, error) {
 		case *ast.CallExpr:
 			return extractModel(ftt)
 		default:
-			return "", fmt.Errorf("Selector is of not managed type: %T", ftt)
+			return "", fmt.Errorf("selector is of not managed type: %T", ftt)
 		}
 	}
-	return "", errors.New("Unparsable function call")
+	return "", errors.New("unparsable function call")
 }
 
 // extractParams extracts the parameters of the given FuncType
@@ -632,13 +630,13 @@ func extractReturnType(ft *ast.FuncType, modInfo *ModuleInfo) []TypeData {
 // computeExportPath returns the import path of the given type
 func computeExportPath(typ types.Type) string {
 	var res string
-	switch typ := typ.(type) {
+	switch typTyped := typ.(type) {
 	case *types.Struct, *types.Named:
-		res = types.TypeString(typ, (*types.Package).Path)
+		res = types.TypeString(typTyped, (*types.Package).Path)
 	case *types.Pointer:
-		res = computeExportPath(typ.Elem())
+		res = computeExportPath(typTyped.Elem())
 	case *types.Slice:
-		res = computeExportPath(typ.Elem())
+		res = computeExportPath(typTyped.Elem())
 	}
 	return res
 }
