@@ -6,7 +6,7 @@ package generate
 import (
 	"bytes"
 	"fmt"
-	"go/format"
+//	"go/format"
 	"io/ioutil"
 	"path"
 	"strings"
@@ -425,13 +425,15 @@ func isRecordSetType(typ string, models map[string]ModelASTData) (bool, bool) {
 func CreateFileFromTemplate(fileName string, template *template.Template, data interface{}) {
 	var srcBuffer bytes.Buffer
 	template.Execute(&srcBuffer, data)
+	/*
 	srcData, err := format.Source(srcBuffer.Bytes())
 	if err != nil {
 		log.Panic("Error while formatting generated source file", "error", err, "fileName",
 			fileName, "mData", fmt.Sprintf("%#v", data), "src", srcBuffer.String())
 	}
+	*/
 	// Write to file
-	err = ioutil.WriteFile(fileName, srcData, 0644)
+	err := ioutil.WriteFile(fileName, srcBuffer.Bytes(), 0644)
 	if err != nil {
 		log.Panic("Error while saving generated source file", "error", err, "fileName", fileName)
 	}
